@@ -4,24 +4,6 @@
 #'
 #' @param output  The list of output variables.
 #'
-#' @param api_url The REDCap URL
-#'
-#' @param api_token The token generated for the REDCap URL
-#'
-#' @param fields  The fields in REDCap to be downloaded
-#'
-#' @param eventcol  The name of the column in REDCap for trial phase input
-#'
-#' @param IDID  The name of the column for subject ID input
-#'
-#' @param covariates  The covariates to be balanced in BayCAR
-#'
-#' @param groupID The name of the column for group assignment input
-#'
-#' @param events The name of trial phase
-#'
-#' @param groupletterID The list of letters for group assignments
-#'
 #' @examples
 #'
 #' myserver(input, output)
@@ -29,26 +11,30 @@
 #' @export
 
 
-myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, covariates, groupID, events, groupletterID) {
+myserver = function(input, output) {
   # Define a reactive value to hold the data
   data <- reactiveVal(NULL)
 
   observeEvent(input$show, {
     # Read data from the project
     dataR <- redcap_read(batch_size=300, redcap_uri=api_url, token=api_token, fields=fields)
+    names(dataR$data)=tolower(names(dataR$data))
+
     data0=dataR$data[substr(dataR$data[,eventcol],1,3)=="ppt",]
-    duplicates=duplicated(paste0(data0[,IDID], data0[,eventcol]))+0
-    dataevent=data0[, c(IDID, eventcol)]
+    data00=data0=data0[!duplicated(data0[, IDID]),]
 
     data1=dataR$data[substr(dataR$data[,eventcol],1,1)=="b",]
     data0=data0[,c(IDID, eventcol, covariates)]
     data1=data1[,c(IDID,groupID)]
     data1=data1[data1[, IDID]%in%data0[, IDID],]
 
+
     if (all(data0[, IDID]%in%data1[, IDID])) {} else
     {ndata1=data.frame(record_id=data0[, IDID][!data0[, IDID]%in%data1[, IDID]], randomization_group=NA)
     data1=rbind(data1, ndata1)}
-    datam=merge(data0, data1, by=IDID)
+
+    datam0=datam=merge(data0, data1, by=IDID)
+    duplicates=duplicated(datam0[,IDID])
 
     file2 <- input$file2
     ext2 <- tools::file_ext(file2$datapath)
@@ -56,36 +42,60 @@ myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, c
     validate(need(ext2 == "csv", "Please upload a csv file"))
 
     new=  read.csv(file2$datapath, header = input$header2)
-    new[,IDID]=as.character(new[,IDID])
+    names(new)=tolower(names(new))
+    if (any(names(new)==groupID)) {} else
+    {new$randomization_group=NA}
+    if (any(names(datam)==groupID)) {} else
+    {if (nrow(datam)>0) {datam$randomization_group=NA}}
     new=new[,c(IDID, covariates, groupID)]
 
-    datam=datam[,c(IDID, covariates, groupID)]
+
+    eventcol.char=nchar(events)
+    siteid=new$site
+    siteid[siteid=="PBRC"]=1
+    siteid[siteid=="Kaiser"]=2
+    siteid[siteid=="Dana Farber"]=3
+
+    new[,eventcol]=paste0(substr(events,1, (eventcol.char-1)), siteid)
+    datam=datam[,c(IDID,eventcol, covariates, groupID)]
+    datam[,groupID][is.na(datam[,groupID])]=""
+    datam=datam[datam[,groupID]!="",]
 
     if (any(new[, IDID]=="")) {
       output$noID= shiny::renderText("Warning! Please input ID for this(these) subjects! ")
     } else
-
-      if (any(new[, IDID]%in%datam[, IDID])) {
-        output$noID=shiny::renderUI( HTML(as.character(div(style="color: red;", "Warning! The new subject ID(s) has(ve) duplicates in those already randomized. Please double check the IDs!")) ) )
-      }
-
-    else
-      if (any(duplicates==1)) {
-        output$noID=shiny::renderUI( HTML(as.character(div(style="color: red;", "Warning! There are duplicated IDs in the existing REDCap database. Clean up first!")) ) )
+      if (any(!new[, IDID]%in%datam0[, IDID])) { newIDID=new[,IDID]
+      output$noID=shiny::renderUI( HTML(as.character(div(style="color: red;", paste("Warning! Some of new subject IDs (", newIDID[!newIDID%in%datam[,IDID]], ") does not exist in the pre-screening ID list. Please double check the IDs!", sep=" "))) ) )
       } else
-      {     output$noID=shiny::renderText("                                           ")
-      output$tablenew <- DT::renderDataTable(new,
-                                         options = list(dom = 't',bFilter=0,
-                                                        autoWidth = TRUE,  columnDefs = list(list(orderable=FALSE,targets='_all', className = 'dt-center', visible=TRUE, width='100') ),
-                                                        buttons = list(
-                                                          list(extend = 'copy', title = "New data")),pageLength = 15, lengthChange = FALSE)
-      )
-      }
+        if (any(duplicates)) {
+          output$noID=shiny::renderUI( HTML(as.character(div(style="color: red;", "Warning! There are duplicated IDs in the existing REDCap database. Clean it up first!")) ) )
+        } else
+        {     output$noID=shiny::renderText("                                           ")
+        output$tablenew <- DT::renderDataTable(new,
+                                               options = list(dom = 't',bFilter=0,
+                                                              autoWidth = TRUE,  columnDefs = list(list(orderable=FALSE,targets='_all', className = 'dt-center', visible=TRUE, width='100') ),
+                                                              buttons = list(
+                                                                list(extend = 'copy', title = "New data")),pageLength = 15, lengthChange = FALSE)
+        )
+        }
 
-    if (any(duplicates==1)&any(new[, IDID]%in%datam[, IDID])) {
-      output$noID=shiny::renderUI( HTML(as.character(div(style="color: red;", "Warning! There are duplicated IDs in the existing REDCap database. Also the new subject(s) has(ve) been randomized before. Clean up first!")) ) )}
+    if (any(duplicates)&any(!new[, IDID]%in%datam0[, IDID])) {
+      output$noID=shiny::renderUI( HTML(as.character(div(style="color: red;", "Warning! There are duplicated IDs in the existing REDCap database. Also the new subject(s) has(ve) not been screened. Clean up the data first!")) ) )}
+
+    should.be.ran=randomized=rep(NA, nrow(datam))
+    output$missing.ran=shiny::renderUI("")
+    for (i in 1:nrow(datam))
+    {should.be.ran[i]=all(!is.na(datam[i,covariates]))&(is.na(datam[i,groupID]))}
+    if (any(should.be.ran)) {
+      output$missing.ran=shiny::renderUI( HTML(as.character(div(style="color: red;", "Warning! Some subjects have covariate data, but not been randomized. Clean up the data first!")) ) )}
+
+    output$wrong.ran=shiny::renderUI("")
+    for (i in 1:nrow(datam))
+    {randomized[i]=any(is.na(datam[i,covariates]))&(!is.na(datam[i,groupID]))}
+    if (any(should.be.ran)) {
+      output$wrong.ran=shiny::renderUI( HTML(as.character(div(style="color: red;", "Warning! Some subjects have missing covariate data, but been randomized. Clean up the data first!")) ) )}
+
     output$spce=shiny::renderText("")
-
   }
   )
 
@@ -109,24 +119,37 @@ myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, c
 
     datam=merge(data0, data1, by=IDID)
 
+    if (any(is.na(datam[,c(covariates, groupID)]))) {} else
+    {}
+
     file2 <- input$file2
     ext2 <- tools::file_ext(file2$datapath)
     req(file2)
     validate(need(ext2 == "csv", "Please upload a csv file"))
 
     new=  read.csv(file2$datapath, header = input$header2)
+    names(new)=tolower(names(new))
     if (any(names(new)==groupID)) {} else
     {new$randomization_group=NA}
     if (any(names(datam)==groupID)) {} else
-    {datam$randomization_group=NA}
+    {if (nrow(datam)>0) {datam$randomization_group=NA}}
     new=new[,c(IDID, covariates, groupID)]
 
-    eventcol.char=nchar(events)
 
-    new[,eventcol]=paste0(substr(events,1, (eventcol.char-1)), new$site)
+    eventcol.char=nchar(events)
+    siteid=new$site
+    siteid[siteid=="PBRC"]=1
+    siteid[siteid=="Kaiser"]=2
+    siteid[siteid=="Dana Farber"]=3
+
+    new[,eventcol]=paste0(substr(events,1, (eventcol.char-1)), siteid)
     datam=datam[,c(IDID,eventcol, covariates, groupID)]
+    datam[,groupID][is.na(datam[,groupID])]=""
+    datam=datam[datam[,groupID]!="",]
+
+
     data=rbind(datam, new)
-    covariates0=covariates
+
 
     dataevent=data[, c(IDID, eventcol)]
 
@@ -134,6 +157,7 @@ myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, c
 
     covnames=names(data)
     categorical=covnames[!covnames%in%c(IDID, eventcol, groupID)]
+    categorical=categorical[categorical%in%covariates]
     Continuous= input$Continuous
     Continuous=Continuous[Continuous%in%names(data)]
     categorical=categorical[!categorical%in%Continuous]
@@ -145,9 +169,9 @@ myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, c
     planned.sample.size=input$planned.sample.size
 
     if (input$trial=="multi-site")
-    {  categoricalx=c(categorical[categorical!="site"])
+    {  categoricalx=c(categorical[!categorical%in%c("site")])
     for (i in 1:length(categoricalx))
-    {interi=as.factor(as.character(paste0(data$site, data[,categoricalx[i]])))
+    {interi=as.factor(as.character(paste(data$site, data[,categoricalx[i]], sep="-")))
 
     if (i==1) {inx=data.frame(interi)} else {inx=data.frame(inx, interi)}
     }
@@ -155,9 +179,14 @@ myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, c
     names(inx)=paste0("s",categoricalx)
     data=cbind(data,inx)
     if (length(Continuous)>0)
-    {covariates0=covariates0[!covariates0%in%Continuous]
+    {
+      nsite=rep(NA, nrow(data))
+      nsite[data$site=="PBRC"]=1
+      nsite[data$site=="Kaiser"]=2
+      nsite[data$site=="Dana Farber"]=3
+
       for (j in 1:length(Continuous))
-      {sContinuous=as.numeric(data$site)*data[,Continuous[j]]
+      {sContinuous=nsite*data[,Continuous[j]]
       if (j==1) {dContinous=sContinuous} else
       {dContinous=cbind(dContinous, sContinuous)}
       }
@@ -200,8 +229,14 @@ myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, c
     outdata0=outdata[,c(IDID, eventcol, covariates0)]
     outdata1=outdata[,c(IDID, eventcol, groupID)]
     outdata1[, eventcol]=paste0("b", substr(outdata1[, eventcol], 4, 50))
-    redcap_write(outdata0,redcap_uri=api_url, token=api_token, overwrite_with_blanks=FALSE, verbose=FALSE)
-    redcap_write(outdata1,redcap_uri=api_url, token=api_token, overwrite_with_blanks=FALSE, verbose=FALSE)
+
+    for (i in 1:length(covariates))
+    {wh.name=which(tolower(names(outdata0))==tolower(covariates[i]))
+    names(outdata0)[wh.name]=covariates[i]
+    }
+
+    redcap_write(outdata0,redcap_uri=api_url, token=api_token, overwrite=TRUE)
+    redcap_write(outdata1,redcap_uri=api_url, token=api_token, overwrite=TRUE)
 
 
     newlyRandomized=NULL
@@ -228,15 +263,15 @@ myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, c
     {
       local({i<-i;
       output[[df_names[i]]] = DT::renderDataTable(out[[i]], rownames=FALSE,
-                                              options = list(dom = 't',bFilter=0, autoWidth = TRUE,
-                                                             columnDefs = list( list(targets = as.numeric(substr(input$arms,1,1)), className = "dt-center", createdCell = JS("function(td, cellData, rowData, row, col) {td.style.color = 'blue';}")),
-                                                                                #list(targets = 0                                   , className = "dt-center", createdCell = JS("function(td, cellData, rowData, row, col) {td.style.color = 'white';}")),
-                                                                                list(orderable=FALSE, targets='_all', className = 'dt-center', visible=TRUE, width='30') ),
-                                                             buttons = list(list(extend = 'copy', title = "My custom title 1")), pageLength = 15, lengthChange = FALSE,
-                                                             initComplete = JS(
-                                                               "function(settings, json) {",
-                                                               "$(this.api().table().header()).css({'background-color': 'blue', 'color': 'white'});",
-                                                               "}"))
+                                                  options = list(dom = 't',bFilter=0, autoWidth = TRUE,
+                                                                 columnDefs = list( list(targets = as.numeric(substr(input$arms,1,1)), className = "dt-center", createdCell = JS("function(td, cellData, rowData, row, col) {td.style.color = 'blue';}")),
+                                                                                    #list(targets = 0                                   , className = "dt-center", createdCell = JS("function(td, cellData, rowData, row, col) {td.style.color = 'white';}")),
+                                                                                    list(orderable=FALSE, targets='_all', className = 'dt-center', visible=TRUE, width='30') ),
+                                                                 buttons = list(list(extend = 'copy', title = "My custom title 1")), pageLength = 15, lengthChange = FALSE,
+                                                                 initComplete = JS(
+                                                                   "function(settings, json) {",
+                                                                   "$(this.api().table().header()).css({'background-color': 'blue', 'color': 'white'});",
+                                                                   "}"))
       )})}
 
 
@@ -248,33 +283,30 @@ myserver = function(input, output, api_url, api_token, fields, eventcol, IDID, c
       output$WNOnewlyRandomized=shiny::renderUI( HTML(as.character(div(style="color: red;", ""))))
       output$table99=NULL
       output$table99 <- DT::renderDataTable(newlyRandomized[,c(IDID, groupID)],
-                                        options = list(dom = 't',bFilter=0,addClass = 'green-table',  autoWidth = TRUE,
-                                                       columnDefs = list(list(orderable=FALSE,targets='_all', className = 'dt-center', visible=TRUE, width='30')),
-                                                       initComplete = JS(
-                                                         "function(settings, json) {",
-                                                         "$(this.api().table().header()).css({'background-color': 'red', 'color': 'white'});",
-                                                         "}")
-                                        ))
-      # buttons = list( list(extend = 'copy', title = "My custom title 1")),pageLength = 15, lengthChange = FALSE)
-    }
+                                            options = list(dom = 't',bFilter=0,addClass = 'green-table',  autoWidth = TRUE,
+                                                           columnDefs = list(list(orderable=FALSE,targets='_all', className = 'dt-center', visible=TRUE, width='30')),
+                                                           initComplete = JS(
+                                                             "function(settings, json) {",
+                                                             "$(this.api().table().header()).css({'background-color': 'red', 'color': 'white'});",
+                                                             "}")
+                                            ))
 
-    redcap <- redcapConnection(api_url, api_token)
+      output$downloadData <- downloadHandler(
+        filename = function() { "data.csv" },
+        content = function(file) {
+          write.csv(newlyRandomized[,c(IDID, groupID)], file, row.names = FALSE)
+        }
+      )
+      }
 
-    # Define the recipient, subject, and body of the email
-    to <- "shengping.yang@pbrc.edu"
-    subject <- paste0("Randomization on ", Sys.Date())
-    body <-  paste0("<p>This is a test email sent by REDCap API.</p>", newlyRandomized[,c(IDID, groupID)])
-    # Send the email
-    send_email(redcap, to = to, subject = subject, body =  body)
-    output$email_status <- DT:shiny::renderText("Email sent successfully!")
 
     if (eids[1]!="NO exclusion!")
     {eex=ex; names(eex)="Excluded IDs"
     output$table98 <- DT::renderDataTable(eex,
-                                      options = list(dom = 't',bFilter=0,
-                                                     autoWidth = TRUE,  columnDefs = list(list(orderable=FALSE,targets='_all', className = 'dt-center', visible=TRUE, width='30') ),
-                                                     buttons = list(
-                                                       list(extend = 'copy', title = "My custom title 1")),pageLength = 15, lengthChange = FALSE)
+                                          options = list(dom = 't',bFilter=0,
+                                                         autoWidth = TRUE,  columnDefs = list(list(orderable=FALSE,targets='_all', className = 'dt-center', visible=TRUE, width='30') ),
+                                                         buttons = list(
+                                                           list(extend = 'copy', title = "My custom title 1")),pageLength = 15, lengthChange = FALSE)
     )}
 
   }

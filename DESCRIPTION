@@ -1,16 +1,16 @@
 Package: BARs
 Type: Package
 Title: Bayesian Adaptive Randomization in Shiny
-Version: 0.1.0
+Version: 0.1.1
 Author: Shengping Yang and Jianrong Wu
 Maintainer: Shengping Yang <shengping.yang@pbrc.edu>
 Description: Adaptive randomization often requires continuous exchange of infromation between different units. To reduce the requirements of unnecessary process and minimize man-made errors, the BayCAR randomization method is developed into a Shiny application. Meanwhile, a REDCap API is used to streamline data input, output to achieve automated adaptivve randomization. With proper setup, the BARs package is expected to perform data input, output, and adaptive randomization by clicking on a desktop icon. 
 License: GPL-2
 Encoding: UTF-8
-RoxygenNote: 7.2.3
+RoxygenNote: 7.2.3.9000
 NeedsCompilation: no
 Depends: shiny, stats, DT, REDCapR, redcapAPI, utils 
-Packaged: 2022-12-25 19:03:11 UTC; ryang
+Packaged: 2023-01-21 19:03:11 UTC; ryang
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
