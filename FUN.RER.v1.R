@@ -21,12 +21,14 @@ library(BlandAltmanLeh)
       uid2=paste0(uids, "2")
       out1=MET.fun(data.path, uid1, out.path, plot.path)
       out2=MET.fun(data.path, uid2, out.path, plot.path)
+      return(list(out1, out2))
       dev.off()
       
       } else
       { tiff(paste0(plot.path,uids, ".tif"), width=5600, height = 2000, res=600, compression = 'zip')
        par(mfrow=c(1,1), mar=c(3,5,1,1))
        out=MET.fun(data.path, uids, out.path, plot.path)
+       return(out)
        dev.off()
       }
   
@@ -163,3 +165,38 @@ library(BlandAltmanLeh)
  }
   
    
+  
+  
+  
+  ICC.plot.fun=function(out, nmsi, plot.path)
+  {y1=as.vector(out[out$visit=="V1",nmsi])
+  y2=out[out$visit=="V2",nmsi]
+  
+  mgi=data.frame(y1, y2)
+  
+  iout=ICC(mgi) 
+  
+  iiout= iout[[1]][2,]
+  
+  mixy=min(mgi, na.rm=TRUE) 
+  maxy=max(mgi, na.rm=TRUE)
+  dif=maxy-mixy
+  
+  mixy=mixy-dif*.1
+  maxy=maxy+dif*.1
+  
+  tiff(paste(plot.path, nmsi,".tiff", sep=""), width = 8, height = 4, units = 'in',  res = 1200, compression = "zip" ) 
+  par(mfrow=c(1,2))
+  
+  
+  plot(mgi[,1], mgi[,2],pch=16, xlim=c(mixy, maxy), ylim=c(mixy, maxy),
+       main=nms[i],   xlab="Visit 1", ylab="Visit 2")
+  abline(0,1, col=2)
+  pp=round(iout[[1]][2,]$p,3)
+  if (pp==0) {pp="<0.001"} else
+  {pp=paste0("=",pp[pp!=0])}
+  bland.altman.plot(mgi[,2], mgi[,1],main=paste0(nms[i]," (ICC=", round(iout[[1]][2,]$ICC,2), "; P",pp, ")"),pch=16, xlab="Means", ylab="Differences")
+  abline(h=0, col=2)
+  
+  dev.off()
+  }
