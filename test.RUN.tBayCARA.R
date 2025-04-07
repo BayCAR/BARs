@@ -174,8 +174,7 @@ ttdata=ttdata[order(ttdata$trt),]
 
 
 ppRA=postP.Tfun(ttdata, c(mu0 ), presize, p3, p4)
-ppRA2=as.numeric(ppRA[,2])
-ppRA2=sqrt(ppRA2/sum(ppRA2))
+ppRA2= (ppRA[,2])
 pwr=ppRA2[2]
 
 

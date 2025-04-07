@@ -204,7 +204,8 @@ postP.Bfun=function(frq)
 ##############################################################################
  
 
-postP.Tfun = function(tdata, premu, presize, p3, p4) {
+postP.Tfun = function(tdata, premu, presize, p3, p4, transformation.parameter) {
+  if (missing(transformation.parameter)) {transformation.parameter=1/2}
   # Get unique treatment groups and their counts
   ntrt <- sort(unique(tdata$trt))
   nntrt <- length(ntrt)
@@ -265,9 +266,17 @@ postP.Tfun = function(tdata, premu, presize, p3, p4) {
     }
   }
   
-  doutp = data.frame(outp, post_means, post_scale, df, ybar)
+  outp=as.data.frame(outp)
+  doutp = as.data.frame(cbind(outp, post_means, post_scale, df, ybar))
   names(doutp) = c("Group", "PosteriorP", "Post_mean", "Post_scale", "df", "ybar")
+  doutp$PosteriorP=as.numeric(doutp$PosteriorP)
+ 
+  doutp$PosteriorP=doutp$PosteriorP^transformation.parameter
+  
+  doutp$PosteriorP= doutp$PosteriorP/sum(doutp$PosteriorP) 
   row.names(doutp) = doutp$Group
+  
+  print(doutp[,2])
   return(doutp)
 }
 
