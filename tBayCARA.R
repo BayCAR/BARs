@@ -237,6 +237,10 @@ postP.Tfun = function(tdata, premu, presize, p3, p4, transformation.parameter) {
                             (2 * (presize[i] + n_i))) / ((p3[i] + n_i / 2) * (presize[i] + n_i)))
   }
   
+  post_means[is.na(post_means)]=mean(post_means, na.rm=TRUE)
+  post_scale[is.na(post_scale)]=mean(post_scale, na.rm=TRUE)
+  
+  
   # Loop to compute posterior probability for each group
   for (j in 1:length(sntrt)) {
     # Identify the target group (T in your case)
@@ -276,7 +280,7 @@ postP.Tfun = function(tdata, premu, presize, p3, p4, transformation.parameter) {
   doutp$PosteriorP= doutp$PosteriorP/sum(doutp$PosteriorP) 
   row.names(doutp) = doutp$Group
   
-  print(doutp[,2])
+  #print(doutp[,2])
   return(doutp)
 }
 
